@@ -1,15 +1,17 @@
 #include <iostream>
-#include <vector>
 #include <cstdint>
-
-
-struct test {
-    uint32_t field;
-};
+#include <thread>
+#include "src/window.h"
 
 
 int main() {
-    uint8_t c = 255;
-    std::cout << static_cast<unsigned>(c) << ", " << sizeof(c) << "\n";
+    
+    std::thread windowThread([] {
+        Window window;
+        window.create(800, 500, "Window", false);
+        window.startMessageLoop();
+    });
+    
+    windowThread.join();
     return 0;
 }
