@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include <windows.h>
+#include <iomanip>
 
 struct WindowCreationInfo {
     uint32_t width;
@@ -12,32 +13,32 @@ struct WindowCreationInfo {
     bool maximized;
 };
 
-struct videoBuffer {
-    BITMAPINFO bitmapInfo;
+struct VideoBuffer {
+    BITMAPINFO info;
     void* memory;
-    uint32_t width;
-    uint32_t height;
-    uint32_t pitch = width * 4; // pitch is the size of one row, but because i have no padding or anything, its just (width * size of px), which is 32bits AKA 4 bytes.
+    uint32_t width; //in px
+    uint32_t height; // in px
+    uint32_t pitch; // pitch is the size of one row, in bytes
 };
 
 class Window {
 public:
-    uint32_t width;
-    uint32_t height;
+    HWND hwnd;
+    VideoBuffer videobuffer;
 
-    void createVideoBuffers();
-    void recreateVideoBuffers();
+    void destroy();
+    void triggerBufferDraw();
+    void recreateVideoBuffer(uint32_t w, uint32_t h);
     void create(uint32_t w, uint32_t h, std::string title, bool maximized);
     void setTitle(std::string newTitle);
     void startMessageLoop();
-
+    
+    void fillColor(uint32_t color); // color format: 0x00RRGGBB (little-endian BGRA in memory)
+    void fillRandColor();
 private:
-    HWND hwnd;
     
     static bool classRegistered;
     static void registerWindowClass(HINSTANCE hInstance);
     
-    //std::vector<videoBuffer> bufferQueue; ???
-    
-    void updateWindowSize(uint32_t w, uint32_t h);
+    //std::vector<videoBuffer> bufferQueue; maybe use for double or triple buffering later
 };
