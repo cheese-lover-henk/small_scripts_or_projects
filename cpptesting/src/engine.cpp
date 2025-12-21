@@ -29,7 +29,7 @@ void Engine::startMainLoop() {
             seconds_passed -= 1.0;
         }
         
-        bufferManager->swapBuffers();
+        //bufferManager->swapBuffers();
         
         
         
