@@ -12,7 +12,9 @@ void Engine::startMainLoop() {
     uint32_t frames = 0;
     double seconds_passed = 0.0;
     
-    
+    // init renderer
+    Renderer renderer;
+    renderer.init();
     while(running) {
         // for the loop timings
         auto frameStartTime = Clock::now();
@@ -22,17 +24,23 @@ void Engine::startMainLoop() {
         seconds_passed += delta;
         frames++;
         if(seconds_passed > 1.0) {
-            std::cout << "FPS: " << frames << "\n";
+            std::cout << "FPS: " << frames << " (/" << targetFPS << ")\n";
             frames = 0;
             seconds_passed -= 1.0;
         }
+        
+        bufferManager->swapBuffers();
         
         
         
         pollWindowEvents();
         //update game state
-        //render game
+        renderer.render(bufferManager->getBackBuffer());
+        
         //tell Window class to display the rendered image
+        WindowCommand c;
+        c.type = PAINT_FRAME;
+        commandQueue->enqueue(c);
         
         
         // if there is time left, then just do nothing until the target frame time (matching target fps) is reached
@@ -49,9 +57,6 @@ void Engine::pollWindowEvents() {
     
     while(succeeded) {
         switch(e.type) {
-            case CLOSE:
-                exit();
-                break;
             case KEYDOWN: {
                 int code = e.pl.key.keycode;
                 std::cout << "keydown: " << (char)code << "\n";
@@ -64,10 +69,26 @@ void Engine::pollWindowEvents() {
                 
                 break;
             }
-            default:
-                int i = 0;
+            case MOUSEMOVE:
+                mouseX = e.pl.mouse.x;
+                mouseY = e.pl.mouse.y;
+                break;
+            case MOUSEDOWN_L:
+                mouseX = e.pl.mouse.x;
+                mouseY = e.pl.mouse.y;
+                std::cout << "mouse clicked at: (" << mouseX << ", " << mouseY << ")\n";
+                break;
+            case RESIZE:
+                bufferManager->recreateFrameBuffers(e.pl.size.x, e.pl.size.y);
+                break;
+            case CLOSE:
+                WindowCommand c;
+                c.type = CLOSE_WINDOW;
+                commandQueue->enqueue(c); //send window the command to close
+                
+                exit(); //close ourselves (engine)
+                break;
         }
-        
         succeeded = windowEventQueue->try_dequeue(e);
     }
 }
@@ -75,6 +96,7 @@ void Engine::pollWindowEvents() {
 void Engine::setTargetFPS(uint32_t target) {
     targetFPS = target;
     targetFrametime_seconds = 1.0 / target;
+    std::cout << "set target fps to: " << target << "\n";
 }
 
 void Engine::exit() {
@@ -83,4 +105,13 @@ void Engine::exit() {
 
 void Engine::setWindowEventQueuePtr(rwQueue<WindowEvent>* queue_ptr) {
     windowEventQueue = queue_ptr;
+}
+
+void Engine::setWindowCommandQueuePtr(rwQueue<WindowCommand>* queue_ptr) {
+    commandQueue = queue_ptr;
+}
+
+void Engine::setFrameBufferManager(FrameBufferManager* vbuffermgr) {
+    bufferManager = vbuffermgr;
+    std::cout << "setframebuffermgr in engine\n";
 }

@@ -9,6 +9,7 @@ enum WindowEventType {
     MOUSEDOWN_R,
     MOUSEUP_R,
     CLOSE,
+    RESIZE,
 };
 
 struct KeyEvent {
@@ -20,10 +21,25 @@ struct MouseEventPos {
     int y;
 };
 
+struct SizeXY {
+    int x;
+    int y;
+};
+
 struct WindowEvent {
     WindowEventType type;
     union {
         KeyEvent key;
         MouseEventPos mouse;
+        SizeXY size;
     } pl;
+};
+
+enum WindowCommandType {
+    PAINT_FRAME,
+    CLOSE_WINDOW,
+};
+
+struct WindowCommand {
+    WindowCommandType type;
 };

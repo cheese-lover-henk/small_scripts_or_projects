@@ -10,6 +10,7 @@
 
 #include "readerwriterqueue.h"
 #include "windowEvents.h"
+#include "framebuffermanager.h"
 
 template<typename T>
 using rwQueue = moodycamel::ReaderWriterQueue<T>;

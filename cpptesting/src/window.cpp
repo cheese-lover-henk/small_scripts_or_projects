@@ -9,6 +9,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     
     WindowEvent e;
     switch(msg) {
+        // user input events
         case WM_KEYDOWN:
             e.type = KEYDOWN;
             e.pl.key.keycode = (int)wParam;
@@ -19,28 +20,65 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             e.pl.key.keycode = (int)wParam;
             window->eventQueue->enqueue(e);
             break;
+        case WM_MOUSEMOVE:
+            e.type = MOUSEMOVE;
+            e.pl.mouse.x = (int)(short)LOWORD(lParam);
+            e.pl.mouse.y = (int)(short)HIWORD(lParam);
+            window->eventQueue->enqueue(e);
+            break;
+        case WM_LBUTTONDOWN:
+            e.type = MOUSEDOWN_L;
+            e.pl.mouse.x = (int)(short)LOWORD(lParam);
+            e.pl.mouse.y = (int)(short)HIWORD(lParam);
+            window->eventQueue->enqueue(e);
+            break;
+        case WM_LBUTTONUP:
+            e.type = MOUSEUP_L;
+            e.pl.mouse.x = (int)(short)LOWORD(lParam);
+            e.pl.mouse.y = (int)(short)HIWORD(lParam);
+            window->eventQueue->enqueue(e);
+            break;
+        case WM_RBUTTONDOWN:
+            e.type = MOUSEDOWN_R;
+            e.pl.mouse.x = (int)(short)LOWORD(lParam);
+            e.pl.mouse.y = (int)(short)HIWORD(lParam);
+            window->eventQueue->enqueue(e);
+            break;
+        case WM_RBUTTONUP:
+            e.type = MOUSEUP_R;
+            e.pl.mouse.x = (int)(short)LOWORD(lParam);
+            e.pl.mouse.y = (int)(short)HIWORD(lParam);
+            window->eventQueue->enqueue(e);
+            break;
+        
+        // window management events
         case WM_CLOSE:
             e.type = CLOSE;
             window->eventQueue->enqueue(e);
-            window->destroy();
             break;
         case WM_DESTROY:
             PostQuitMessage(0);
             break;
         case WM_SIZE:
-            window->recreateVideoBuffer(LOWORD(lParam), HIWORD(lParam));
+            e.type = RESIZE;
+            e.pl.size.x = LOWORD(lParam);
+            e.pl.size.y = HIWORD(lParam);
+            window->eventQueue->enqueue(e);
+            window->bufferManager->recreateFrameBuffers(LOWORD(lParam), HIWORD(lParam));
             break;
         case WM_PAINT: {
-            window->fillRandColor();
+            
+            VideoBuffer* videobuffer = window->bufferManager->getFrontBuffer();
+            
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
         
             StretchDIBits(
                 hdc,
-                0, 0, window->videobuffer.width, window->videobuffer.height,
-                0, 0, window->videobuffer.width, window->videobuffer.height,
-                window->videobuffer.memory,
-                &window->videobuffer.info,
+                0, 0, videobuffer->width, videobuffer->height,
+                0, 0, videobuffer->width, videobuffer->height,
+                videobuffer->memory,
+                &videobuffer->info,
                 DIB_RGB_COLORS,
                 SRCCOPY
             );
@@ -56,13 +94,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 void Window::destroy() {
     PostMessage(hwnd, WM_DESTROY, 0, 0);
+    running = false;
 }
 
 void Window::setWindowEventQueuePtr(rwQueue<WindowEvent>* queue_ptr) {
     eventQueue = queue_ptr;
 }
-    
-    
+
+void Window::setWindowCommandQueuePtr(rwQueue<WindowCommand>* queue_ptr) {
+    commandQueue = queue_ptr;
+}
+
+void Window::setFrameBufferManager(FrameBufferManager* vbuffermgr) {
+    bufferManager = vbuffermgr;
+    std::cout << "setframebuffermgr in window\n";
+}
+
 
 void Window::registerWindowClass(HINSTANCE hInstance) {
     WNDCLASSEX wc;
@@ -123,8 +170,16 @@ void Window::create(uint32_t w, uint32_t h, std::string title, bool maximized) {
     } else {
         ShowWindow(hwnd, SW_SHOWDEFAULT);
     }
+    
+    RECT clientRect;
+    GetClientRect(hwnd, &clientRect);
+
+    uint32_t clientWidth  = clientRect.right - clientRect.left;
+    uint32_t clientHeight = clientRect.bottom - clientRect.top;
+
+    bufferManager->recreateFrameBuffers(clientWidth, clientHeight);
+
     UpdateWindow(hwnd);
-    Window::recreateVideoBuffer(w, h);
 }
 
 void Window::startMessageLoop() {
@@ -134,89 +189,35 @@ void Window::startMessageLoop() {
         return;
     }
     
+    running = true;
     MSG Msg;
-    while(GetMessage(&Msg, NULL, 0, 0) > 0) {
-        TranslateMessage(&Msg);
-        DispatchMessage(&Msg);
+    
+    while(running) {
+        // handle ALL pending windows msgs
+        while(PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE) > 0) {
+            TranslateMessage(&Msg);
+            DispatchMessage(&Msg);
+        }
+        
+        // handle ALL incoming commands from command queue
+        WindowCommand c;
+        
+        while(commandQueue->try_dequeue(c)) {
+            switch(c.type) {
+                case PAINT_FRAME:
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    break;
+                case CLOSE_WINDOW:
+                    destroy();
+                    break;
+            }
+        }
+        Sleep(1);
     }
 }
 
 void Window::setTitle(std::string newTitle) {
     if (hwnd) {
         SetWindowText(hwnd, newTitle.c_str());
-    }
-}
-
-void Window::recreateVideoBuffer(uint32_t width, uint32_t height) { //width and height in bytes
-    if (videobuffer.memory)
-        VirtualFree(videobuffer.memory, 0, MEM_RELEASE);
-    videobuffer.width = width;
-    videobuffer.height = height;
-    
-    uint32_t alignment = 32; //bytes alignment.
-    videobuffer.pitch = width * 4; //row size in bytes, each px color is 4 bytes (a uint32) and 1 "width" is 1 color px, so the total bytes in the row is 4bytes x (amount of pixels) width
-    //videobuffer.pitch = (rowSize + alignment - 1) & ~(alignment - 1); //this sets the pitch to the nearest number divisible by 32, higher than current width
-
-
-    videobuffer.info = {};
-    videobuffer.info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    videobuffer.info.bmiHeader.biWidth = width;
-    videobuffer.info.bmiHeader.biHeight = -height; // top-down
-    videobuffer.info.bmiHeader.biPlanes = 1;
-    videobuffer.info.bmiHeader.biBitCount = 32;
-    videobuffer.info.bmiHeader.biCompression = BI_RGB;
-    
-    
-    uint32_t buffersize = videobuffer.pitch * videobuffer.height;
-    videobuffer.memory = VirtualAlloc(
-        0,
-        buffersize,
-        MEM_COMMIT | MEM_RESERVE,
-        PAGE_READWRITE
-    );
-    std::cout << "recreated video buffer: " << width << "x"<< height << " (" << buffersize << ") bytes, /32 =" << (buffersize / 32) << "\n"; // \32 to check if alignment works
-}
-
-void Window::fillColor(uint32_t color) {
-    uint32_t w = videobuffer.width;
-    uint32_t h = videobuffer.height;
-    
-    uint32_t pitch = videobuffer.pitch;
-    
-    uint8_t* first_address_in_row = (uint8_t*)videobuffer.memory;
-    for(uint32_t i = 0; i < h; i++) {
-        uint32_t *pixel_address = (uint32_t*) first_address_in_row;
-        for(uint32_t j = 0; j < w; j++) {
-            pixel_address[j] = color;
-        }
-        first_address_in_row = first_address_in_row + pitch;
-    }
-}
-
-void Window::fillRandColor() {
-    uint64_t seed = rand();
-    srand(seed * time(NULL));
-    uint32_t i = 0;
-    const double PI = 3.141592653589793;
-    
-    uint32_t w = videobuffer.width;
-    uint32_t h = videobuffer.height;
-    
-    uint32_t pitch = videobuffer.pitch;
-    
-    uint8_t* first_address_in_row = (uint8_t*)videobuffer.memory;
-    for(uint32_t i = 0; i < h; i++) {
-        uint32_t *pixel_address = (uint32_t*) first_address_in_row;
-        for(uint32_t j = 0; j < w; j++) {
-            
-            //color calculation per-pixel
-            
-            uint32_t value = (((i + (rand() % 0xFFFF)) << 16) + (rand() % 0xFFFF));
-            uint32_t color = value* 0.01 * sin((2 * PI) / 10);
-            
-            
-            pixel_address[j] = color;
-        }
-        first_address_in_row = first_address_in_row + pitch;
     }
 }
