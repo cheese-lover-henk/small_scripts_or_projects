@@ -1,7 +1,8 @@
 @echo off
+del main.exe
 echo compiling... (g++)
 echo ------------------
-g++ -o main.exe -I . -I ./src *.cpp src/*.cpp -lgdi32
+g++ -o main.exe -Iinclude main.cpp src\*.cpp -lgdi32
 echo compiling done, running...
 echo ------------------
 main.exe

@@ -6,10 +6,23 @@ bool Window::classRegistered = false;
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     Window* window = (Window*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     
-    switch(msg)
-    {
+    
+    WindowEvent e;
+    switch(msg) {
+        case WM_KEYDOWN:
+            e.type = KEYDOWN;
+            e.pl.key.keycode = (int)wParam;
+            window->eventQueue->enqueue(e);
+            break;
+        case WM_KEYUP:
+            e.type = KEYUP;
+            e.pl.key.keycode = (int)wParam;
+            window->eventQueue->enqueue(e);
+            break;
         case WM_CLOSE:
-            DestroyWindow(hwnd);
+            e.type = CLOSE;
+            window->eventQueue->enqueue(e);
+            window->destroy();
             break;
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -41,6 +54,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
+void Window::destroy() {
+    PostMessage(hwnd, WM_DESTROY, 0, 0);
+}
+
+void Window::setWindowEventQueuePtr(rwQueue<WindowEvent>* queue_ptr) {
+    eventQueue = queue_ptr;
+}
+    
+    
+
 void Window::registerWindowClass(HINSTANCE hInstance) {
     WNDCLASSEX wc;
 
@@ -57,8 +80,7 @@ void Window::registerWindowClass(HINSTANCE hInstance) {
     wc.lpszClassName = g_szClassName;
     wc.hIconSm       = LoadIcon(NULL, IDI_APPLICATION);
 
-    if(!RegisterClassEx(&wc))
-    {
+    if(!RegisterClassEx(&wc)) {
         MessageBox(NULL, "Window Registration Failed!", "Error!",
             MB_ICONEXCLAMATION | MB_OK);
         return;
@@ -90,8 +112,7 @@ void Window::create(uint32_t w, uint32_t h, std::string title, bool maximized) {
     // associate this window object's pointer with the window created in OS
     SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)this);
 
-    if(hwnd == NULL)
-    {
+    if(hwnd == NULL) {
         MessageBox(NULL, "Window Creation Failed!", "Error!",
             MB_ICONEXCLAMATION | MB_OK);
         return;
@@ -107,6 +128,12 @@ void Window::create(uint32_t w, uint32_t h, std::string title, bool maximized) {
 }
 
 void Window::startMessageLoop() {
+    if(eventQueue == NULL) {
+        MessageBox(NULL, "Dont start message loop before creating window event queue!", "Error!",
+            MB_ICONEXCLAMATION | MB_OK);
+        return;
+    }
+    
     MSG Msg;
     while(GetMessage(&Msg, NULL, 0, 0) > 0) {
         TranslateMessage(&Msg);
@@ -151,8 +178,6 @@ void Window::recreateVideoBuffer(uint32_t width, uint32_t height) { //width and 
 }
 
 void Window::fillColor(uint32_t color) {
-    printf("%02X \n", color);
-    
     uint32_t w = videobuffer.width;
     uint32_t h = videobuffer.height;
     
@@ -169,6 +194,29 @@ void Window::fillColor(uint32_t color) {
 }
 
 void Window::fillRandColor() {
-    std::string hex = (std::stringstream() << std::hex << std::setw(6) << std::setfill('0') << (rand() & 0xFFFFFF)).str();
-    Window::fillColor(std::stoul(hex, nullptr, 16));
+    uint64_t seed = rand();
+    srand(seed * time(NULL));
+    uint32_t i = 0;
+    const double PI = 3.141592653589793;
+    
+    uint32_t w = videobuffer.width;
+    uint32_t h = videobuffer.height;
+    
+    uint32_t pitch = videobuffer.pitch;
+    
+    uint8_t* first_address_in_row = (uint8_t*)videobuffer.memory;
+    for(uint32_t i = 0; i < h; i++) {
+        uint32_t *pixel_address = (uint32_t*) first_address_in_row;
+        for(uint32_t j = 0; j < w; j++) {
+            
+            //color calculation per-pixel
+            
+            uint32_t value = (((i + (rand() % 0xFFFF)) << 16) + (rand() % 0xFFFF));
+            uint32_t color = value* 0.01 * sin((2 * PI) / 10);
+            
+            
+            pixel_address[j] = color;
+        }
+        first_address_in_row = first_address_in_row + pitch;
+    }
 }

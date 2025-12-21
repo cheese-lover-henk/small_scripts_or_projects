@@ -1,36 +1,29 @@
-#include <iostream>
-#include <cstdint>
-#include <thread>
-#include <future>
-#include "src/window.h"
+#include "types.h"
+
+#include "window.h"
+#include "engine.h"
 
 int main() {
     
-    // start window thread, and retrieve the window handle
-    std::promise<HWND> hwndPromise;
-    auto hwndFuture = hwndPromise.get_future();
+    // start window thread
     
-    std::thread windowThread([&] { 
+    rwQueue<WindowEvent> q(100);
+    
+    std::thread windowThread([&] {
         Window window;
         window.create(1920, 1080, "Window", false);
-        hwndPromise.set_value(window.hwnd);
+        window.setWindowEventQueuePtr(&q);
         window.startMessageLoop();
     });
     
-    HWND window_handle = hwndFuture.get();
+    std::thread engineThread([&] {
+        Engine engine;
+        engine.setTargetFPS(240);
+        engine.setWindowEventQueuePtr(&q);
+        engine.startMainLoop();
+    });
     
-    // makeshift temporary game loop
-    // if clicking X on window, it still waits for this loop to finish. this is unintended but wont be fixed because this is a temporary loop anyways.
-    std::string input;
-    while(true) {
-        std::cin >> input;
-        if (input == "exit") {
-            break;
-        } else {
-            InvalidateRect(window_handle, nullptr, FALSE);
-        }
-    }
-    PostMessage(window_handle, WM_DESTROY, 0, 0);
+    engineThread.join();
     windowThread.join();
     return 0;
 }

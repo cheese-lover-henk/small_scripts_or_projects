@@ -1,10 +1,6 @@
 #pragma once
 
-#include <iostream>
-#include <cstdint>
-#include <vector>
-#include <windows.h>
-#include <iomanip>
+#include "types.h"
 
 struct WindowCreationInfo {
     uint32_t width;
@@ -21,9 +17,12 @@ struct VideoBuffer {
     uint32_t pitch; // pitch is the size of one row, in bytes
 };
 
+
+
 class Window {
 public:
     HWND hwnd;
+    rwQueue<WindowEvent>* eventQueue;
     VideoBuffer videobuffer;
 
     void destroy();
@@ -31,6 +30,7 @@ public:
     void recreateVideoBuffer(uint32_t w, uint32_t h);
     void create(uint32_t w, uint32_t h, std::string title, bool maximized);
     void setTitle(std::string newTitle);
+    void setWindowEventQueuePtr(rwQueue<WindowEvent>* queue_ptr);
     void startMessageLoop();
     
     void fillColor(uint32_t color); // color format: 0x00RRGGBB (little-endian BGRA in memory)
