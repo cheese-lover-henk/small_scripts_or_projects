@@ -9,8 +9,8 @@ int main() {
     
     // start window thread
     
-    rwQueue<WindowEvent> eq(100);   //1p1c, window is producer, engine is consumer.
-    rwQueue<WindowCommand> cq(100); //1p1c, engine is producer, window is consumer.
+    rwQueue<WindowEvent> eq(100);   //1parent : 1child, window is producer, engine is consumer.
+    rwQueue<WindowCommand> cq(100); //1parent : 1child, engine is producer, window is consumer.
     FrameBufferManager v;
     v.init();
     
